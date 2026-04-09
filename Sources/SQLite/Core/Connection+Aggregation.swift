@@ -1,12 +1,14 @@
 import Foundation
-#if SQLITE_SWIFT_STANDALONE
+#if StandaloneSQLite
 import sqlite3
-#elseif SQLITE_SWIFT_SQLCIPHER
+#elseif SQLCipher
 import SQLCipher
-#elseif os(Linux)
-import CSQLite
+#elseif SwiftToolchainCSQLite
+import SwiftToolchainCSQLite
+#elseif SQLiteSwiftCSQLite
+import SQLiteSwiftCSQLite
 #else
-import SQLite3
+import SQLite3 // SystemSQLite
 #endif
 
 extension Connection {

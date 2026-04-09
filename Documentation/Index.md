@@ -3,10 +3,10 @@
 - [SQLite.swift Documentation](#sqliteswift-documentation)
   - [Installation](#installation)
     - [Swift Package Manager](#swift-package-manager)
+        - [Using SQLite.swift with SQLCipher](#using-sqliteswift-with-sqlcipher)
     - [Carthage](#carthage)
     - [CocoaPods](#cocoapods)
       - [Requiring a specific version of SQLite](#requiring-a-specific-version-of-sqlite)
-      - [Using SQLite.swift with SQLCipher](#using-sqliteswift-with-sqlcipher)
     - [Manual](#manual)
   - [Getting Started](#getting-started)
     - [Connecting to a Database](#connecting-to-a-database)
@@ -63,6 +63,7 @@
       - [Renaming Columns](#renaming-columns)
       - [Dropping Columns](#dropping-columns)
       - [Renaming/Dropping Tables](#renamingdropping-tables)
+      - [Creating Tables](#creating-tables)      
     - [Indexes](#indexes)
       - [Creating Indexes](#creating-indexes)
       - [Dropping Indexes](#dropping-indexes)
@@ -108,7 +109,7 @@ process of downloading, compiling, and linking dependencies.
 
   ```swift
   dependencies: [
-    .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.3")
+    .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.5")
   ]
   ```
 
@@ -118,7 +119,105 @@ process of downloading, compiling, and linking dependencies.
   $ swift build
   ```
 
+#### Available traits
+
+The Swift package manager now supports [traits][], which can be used to configure
+SQLite.swift for different use cases.
+
+  ```swift
+  dependencies: [
+    .package(url: "https://github.com/stephencelis/SQLite.swift.git", 
+             from: "0.15.5",
+             traits: ["XXX"])
+  ]
+  ```
+
+| Trait                    | Description                                         | SQLite version                       |
+|--------------------------|-----------------------------------------------------|--------------------------------------|
+| `SystemSQLite` (default) | Uses the system SQLite (provided by Apple)          | macOS 15.7.x: `3.43.2`, 26: `3.50.2` |
+| `SwiftToolchainCSQLite`  | Embeds the SQLite provided by [swift-toolchain][]   | 1.0.7: `3.50.4`                      |
+| `SQLiteSwiftCSQLite`     | Embeds a [custom SQLite][] based on swift-toolchain | `3.50.4`                             |
+| `StandaloneSQLite`       | Only used by CocoaPods                              |                                      |
+| `SQLCipher`              | Embeds [SQLCipher][] (see below)                    | 4.13.0: `3.51.2`                     |
+| `FTS5`                   | Enables FTS5, only works with `SQLiteSwiftCSQLite`  |                                      |
+
+[traits]: https://docs.swift.org/swiftpm/documentation/packagemanagerdocs/packagetraits/
+[custom SQLite]: https://github.com/stephencelis/CSQLite/tree/SQLite.swift
+[swift-toolchain]: https://github.com/swiftlang/swift-toolchain-sqlite 
+
+#### Using SQLite.swift with SQLCipher
+
+If you want to use [SQLCipher][] with SQLite.swift you can specify the `SQLCipher` trait when consuming SQLite.swift.
+
+```swift
+depdencies: [
+  .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.5", traits: ["SQLCipher"])
+]
+```
+
+As of Xcode 26.2 (17C52), there's no direct way in the Xcode UI to select trait variations so you'll need to use a local wrapper package to pull in the SQLite.swift dependency with the `SQLCipher` trait enabled:
+
+```swift
+// swift-tools-version: 6.1
+// The swift-tools-version declares the minimum version of Swift required to build this package.
+
+import PackageDescription
+
+let package = Package(
+    name: "AppDependencies",
+    platforms: [
+        .macOS(.v10_14),
+        .iOS(.v13),
+        .macCatalyst(.v13),
+        .watchOS(.v8),
+        .tvOS(.v15),
+        .visionOS(.v1)
+    ],
+    products: [
+        .library(
+            name: "AppDependencies",
+            targets: ["AppDependencies"]),
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/stephencelis/SQLite.swift.git",
+            from: "0.15.5",
+            traits: ["SQLCipher"])
+    ],
+    targets: [
+        .target(
+            name: "AppDependencies",
+            dependencies: [
+                .product(
+                    name: "SQLite",
+                    package: "SQLite.swift")
+            ]
+        )
+    ]
+)
+```
+
+Within Xcode add your local `AppDependencies` wrapper package as a package dependency and SQLite.swift with SQLCipher functionality will be accessible.
+
+Using the `SQLCipher` trait will cause SQLite.swift to include a dependency on SQLCipher.swift and enable `Connection` methods to set and change the database key:
+
+```swift
+import SQLite
+
+let db = try Connection("path/to/encrypted.sqlite3")
+try db.key("secret")
+try db.rekey("new secret") // changes encryption key on already encrypted db
+```
+
+To encrypt an existing database:
+
+```swift
+let db = try Connection("path/to/unencrypted.sqlite3")
+try db.sqlcipher_export(.uri("encrypted.sqlite3"), key: "secret")
+```
+
 [Swift Package Manager]: https://swift.org/package-manager
+[SQLCipher]: https://www.zetetic.net/sqlcipher/
 
 ### Carthage
 
@@ -129,7 +228,7 @@ install SQLite.swift with Carthage:
  2. Update your Cartfile to include the following:
 
     ```ruby
-    github "stephencelis/SQLite.swift" ~> 0.15.3
+    github "stephencelis/SQLite.swift" ~> 0.15.5
     ```
 
  3. Run `carthage update` and [add the appropriate framework][Carthage Usage].
@@ -159,7 +258,7 @@ install SQLite.swift with Carthage:
     use_frameworks!
 
     target 'YourAppTargetName' do
-        pod 'SQLite.swift', '~> 0.15.3'
+        pod 'SQLite.swift', '~> 0.15.5'
     end
     ```
 
@@ -173,7 +272,7 @@ with the OS you can require the `standalone` subspec:
 
 ```ruby
 target 'YourAppTargetName' do
-  pod 'SQLite.swift/standalone', '~> 0.15.3'
+  pod 'SQLite.swift/standalone', '~> 0.15.5'
 end
 ```
 
@@ -183,48 +282,16 @@ dependency to sqlite3 or one of its subspecs:
 
 ```ruby
 target 'YourAppTargetName' do
-  pod 'SQLite.swift/standalone', '~> 0.15.3'
+  pod 'SQLite.swift/standalone', '~> 0.15.5'
   pod 'sqlite3/fts5', '= 3.15.0'  # SQLite 3.15.0 with FTS5 enabled
 end
 ```
 
 See the [sqlite3 podspec][sqlite3pod] for more details.
 
-#### Using SQLite.swift with SQLCipher
-
-If you want to use [SQLCipher][] with SQLite.swift you can require the
-`SQLCipher` subspec in your Podfile (SPM is not supported yet, see [#1084](https://github.com/stephencelis/SQLite.swift/issues/1084)):
-
-```ruby
-target 'YourAppTargetName' do
-  # Make sure you only require the subspec, otherwise you app might link against
-  # the system SQLite, which means the SQLCipher-specific methods won't work.
-  pod 'SQLite.swift/SQLCipher', '~> 0.15.3'
-end
-```
-
-This will automatically add a dependency to the SQLCipher pod as well as
-extend `Connection` with methods to change the database key:
-
-```swift
-import SQLite
-
-let db = try Connection("path/to/encrypted.sqlite3")
-try db.key("secret")
-try db.rekey("new secret") // changes encryption key on already encrypted db
-```
-
-To encrypt an existing database:
-
-```swift
-let db = try Connection("path/to/unencrypted.sqlite3")
-try db.sqlcipher_export(.uri("encrypted.sqlite3"), key: "secret")
-```
-
 [CocoaPods]: https://cocoapods.org
 [CocoaPods Installation]: https://guides.cocoapods.org/using/getting-started.html#getting-started
 [sqlite3pod]: https://github.com/clemensg/sqlite3pod
-[SQLCipher]: https://www.zetetic.net/sqlcipher/
 
 ### Manual
 
@@ -1582,6 +1649,17 @@ let schemaChanger = SchemaChanger(connection: db)
 try schemaChanger.rename(table: "users", to: "users_new")
 try schemaChanger.drop(table: "emails", ifExists: false)
 ```
+
+#### Creating Tables
+
+```swift
+let schemaChanger = SchemaChanger(connection: db)
+
+try schemaChanger.create(table: "users") { table in 
+    table.add(column: .init(name: "id", primaryKey: .init(autoIncrement: true), type: .INTEGER))
+    table.add(column: .init(name: "name", type: .TEXT, nullable: false))            
+}
+``` 
 
 ### Indexes
 

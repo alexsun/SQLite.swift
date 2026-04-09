@@ -1,14 +1,16 @@
 import XCTest
 @testable import SQLite
 
-#if SQLITE_SWIFT_STANDALONE
+#if StandaloneSQLite
 import sqlite3
-#elseif SQLITE_SWIFT_SQLCIPHER
+#elseif SQLCipher
 import SQLCipher
-#elseif os(Linux)
-import CSQLite
+#elseif SwiftToolchainCSQLite
+import SwiftToolchainCSQLite
+#elseif SQLiteSwiftCSQLite
+import SQLiteSwiftCSQLite
 #else
-import SQLite3
+import SQLite3 // SystemSQLite
 #endif
 
 class StatementTests: SQLiteTestCase {
@@ -27,7 +29,7 @@ class StatementTests: SQLiteTestCase {
 
     func test_zero_sized_blob_returns_null() throws {
         let blobs = Table("blobs")
-        let blobColumn = Expression<Blob>("blob_column")
+        let blobColumn = SQLite.Expression<Blob>("blob_column")
         try db.run(blobs.create { $0.column(blobColumn) })
         try db.run(blobs.insert(blobColumn <- Blob(bytes: [])))
         let blobValue = try db.scalar(blobs.select(blobColumn).limit(1, offset: 0))
@@ -38,7 +40,7 @@ class StatementTests: SQLiteTestCase {
         let names = ["a", "b", "c"]
         try insertUsers(names)
 
-        let emailColumn = Expression<String>("email")
+        let emailColumn = SQLite.Expression<String>("email")
         let statement = try db.prepare("SELECT email FROM users")
         let emails = try statement.prepareRowIterator().map { $0[emailColumn] }
 

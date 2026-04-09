@@ -1,17 +1,9 @@
 import XCTest
-#if SQLITE_SWIFT_STANDALONE
-import sqlite3
-#elseif SQLITE_SWIFT_SQLCIPHER
-import SQLCipher
-#elseif os(Linux)
-import CSQLite
-#else
-import SQLite3
-#endif
 @testable import SQLite
 
-class FTSIntegrationTests: SQLiteTestCase {
-    let email = Expression<String>("email")
+// Note: these tests are only run when the FTS5 trait has been enabled.
+class FTS5IntegrationTests: SQLiteTestCase {
+    let email = SQLite.Expression<String>("email")
     let index = VirtualTable("index")
 
     private func createIndex() throws {
@@ -68,13 +60,10 @@ class FTSIntegrationTests: SQLiteTestCase {
     }
 
     private func createOrSkip(_ createIndex: (Connection) throws -> Void) throws {
-        do {
-            try createIndex(db)
-        } catch let error as Result {
-            try XCTSkipIf(error.description.starts(with: "no such module:") ||
-                          error.description.starts(with: "parse error")
-            )
-            throw error
-        }
+        #if FTS5
+        try createIndex(db)
+        #else
+        throw XCTSkip("FTS5 is not enabled")
+        #endif
     }
 }

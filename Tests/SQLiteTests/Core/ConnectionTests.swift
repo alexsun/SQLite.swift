@@ -3,14 +3,16 @@ import Foundation
 import Dispatch
 @testable import SQLite
 
-#if SQLITE_SWIFT_STANDALONE
+#if StandaloneSQLite
 import sqlite3
-#elseif SQLITE_SWIFT_SQLCIPHER
+#elseif SQLCipher
 import SQLCipher
-#elseif os(Linux)
-import CSQLite
+#elseif SwiftToolchainCSQLite
+import SwiftToolchainCSQLite
+#elseif SQLiteSwiftCSQLite
+import SQLiteSwiftCSQLite
 #else
-import SQLite3
+import SQLite3 // SystemSQLite
 #endif
 
 class ConnectionTests: SQLiteTestCase {
@@ -374,7 +376,7 @@ class ConnectionTests: SQLiteTestCase {
     }
 
     // https://github.com/stephencelis/SQLite.swift/issues/1071
-    #if !os(Linux)
+    #if !(os(Linux) || os(Android))
     func test_createFunction_withArrayArguments() throws {
         db.createFunction("hello") { $0[0].map { "Hello, \($0)!" } }
 
@@ -443,5 +445,28 @@ class ConnectionTests: SQLiteTestCase {
             }
         }
         semaphores.forEach { $0.wait() }
+    }
+
+    func test_compiled_sqlite_version() throws {
+        let conn = try Connection(.inMemory)
+        let version = conn.sqliteVersion
+
+        #if SystemSQLite
+        XCTAssertGreaterThanOrEqual(version, .init(major: 3, minor: 43, point: 2))
+        #elseif SwiftToolchainCSQLite
+        // 1.0.7 uses SQLite 3.50.4
+        XCTAssertGreaterThanOrEqual(version, .init(major: 3, minor: 50, point: 4))
+        #elseif SQLiteSwiftCSQLite
+        XCTAssertGreaterThanOrEqual(version, .init(major: 3, minor: 50, point: 4))
+        #elseif SQLCipher
+        // 4.12.0 uses SQLite 3.51.1
+        // 4.10.0 uses SQLite 3.50.4 (last available pod)
+        // ???    uses SQLite 3.39.4
+        XCTAssertGreaterThanOrEqual(version, .init(major: 3, minor: 39, point: 4))
+        #elseif StandaloneSQLite
+        // when building standalone (= pod), we should have a more recent version
+        // https://github.com/clemensg/sqlite3pod
+        XCTAssertGreaterThanOrEqual(version, .init(major: 3, minor: 51, point: 1))
+        #endif
     }
 }
